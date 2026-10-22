@@ -33,9 +33,10 @@ for itself: what it does, its YouTrack issue, which services use it.
 | What | Where |
 |---|---|
 | Package documentation: what the library does, what it needs from the service | `doc.go` |
-| Public API of the library | root package (`*.go`); subpackages only for parts with different consumers |
+| Public API of the library | `tombstone.go`: Store, Guard/Purge/Deleted; `grpc.go`: unary/stream Interceptors, DeletionServer, metric |
 | Implementation details | `internal/` |
 | Migration source for the service runner (`Migrations`, `MigrationsName`, `MigrationsTable`) | `migrations.go`, `migrations/` |
+| Usage and concurrent deletion/write tests | `integration_test.go` (real primary, service-owned transaction adapter, generated gRPC clients) |
 | PostgreSQL for tests, up → down → up check | `internal/pgtest/` (mirrors `migratetest` of the service template) |
 | Integration guide for services | `README.md`, «Внедрение» |
 | Versions, compatibility, releases, Renovate | `docs/releasing.md`, `CHANGELOG.md`, `.github/workflows/release.yml`, `renovate.json` |
