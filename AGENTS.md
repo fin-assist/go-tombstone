@@ -103,6 +103,7 @@ The same priorities and rules as the services (`AGENTS.md` of `fin-assist/go-ser
 - Database: SQL with parameters only (`$1`), table and column names are constants; tables are named
   `<library>_<name>` so they never collide with a service's. Migrations follow `docs/migrations.md` of the service
   template; a released migration never changes (`docs/releasing.md`, «Миграции»).
+  Choose integer widths by domain range; Squawk's `prefer-bigint-over-int` is excluded repository-wide (FIN-214).
 - Time: "now" comes from the injected clock, never `time.Now()` in logic or queries; durations for metrics and
   timeouts may use `time.Now()` / `time.Since`. Money: integer minor units (`int64`), never floats.
 - Concurrency: an exported type says whether it is safe for concurrent use; a background goroutine is started only
