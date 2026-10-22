@@ -122,9 +122,9 @@ func TestPostgresPurgeReplayRollbackAndSystemEvent(t *testing.T) {
 	if err := db.Within(ctx, func(ctx context.Context) error { return writeData(ctx, db, s, testUser) }); err != nil {
 		t.Fatal(err)
 	}
-	var count int
-	if err := db.pool.QueryRow(ctx, "SELECT count(*) FROM service_data").Scan(&count); err != nil || count != 1 {
-		t.Fatalf("foreign user or resurrection %d %v", count, err)
+	var deletedRows, foreignRows int
+	if err := db.pool.QueryRow(ctx, "SELECT count(*) FILTER (WHERE user_id=$1), count(*) FILTER (WHERE user_id=$2) FROM service_data", testUser, otherUser).Scan(&deletedRows, &foreignRows); err != nil || deletedRows != 0 || foreignRows != 1 {
+		t.Fatalf("deleted user rows %d, foreign user rows %d: %v", deletedRows, foreignRows, err)
 	}
 	var deletedAt time.Time
 	if err := db.pool.QueryRow(ctx, "SELECT deleted_at FROM tombstone_users WHERE user_id='019cf000-0000-7000-8000-000000000001'").Scan(&deletedAt); err != nil || !deletedAt.Equal(time.Unix(123, 0)) {
