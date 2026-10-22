@@ -3,6 +3,7 @@ package tombstone
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,7 +74,7 @@ func TestStoreValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"", "not-a-uuid", "019CF000-0000-7000-8000-000000000001", string(make([]byte, 129))} {
+	for _, id := range []string{"", "not-a-uuid", string(make([]byte, 129))} {
 		if _, err := s.Deleted(ctx, id); !errors.Is(err, ErrUserID) {
 			t.Fatal(err)
 		}
@@ -87,7 +88,7 @@ func TestStoreValidation(t *testing.T) {
 	if err := s.Purge(ctx, testUser, nil); err == nil {
 		t.Fatal("nil remove")
 	}
-	if err := s.Purge(ctx, testUser, func(context.Context) error { return nil }); !errors.Is(err, ErrTransactionRequired) {
+	if err := s.Purge(ctx, testUser, func(context.Context, string) error { return nil }); !errors.Is(err, ErrTransactionRequired) {
 		t.Fatal(err)
 	}
 	for _, tc := range []fakeReader{{}, {deleted: true}, {err: errors.New("secret SQL")}} {
@@ -201,16 +202,18 @@ func (f fakeTransactor) Within(ctx context.Context, fn func(context.Context) err
 }
 
 type fakePurger struct {
+	id    string
 	err   error
 	calls int
 }
 
-func (f *fakePurger) Purge(ctx context.Context, _ string, remove func(context.Context) error) error {
+func (f *fakePurger) Purge(ctx context.Context, id string, remove func(context.Context, string) error) error {
 	f.calls++
+	f.id = id
 	if f.err != nil {
 		return f.err
 	}
-	return remove(ctx)
+	return remove(ctx, id)
 }
 func TestDeletionServer(t *testing.T) {
 	remove := func(context.Context, string) error { return nil }
@@ -291,14 +294,18 @@ type scriptedTx struct {
 	rows       []scriptedRow
 	execErrors []error
 	execCalls  int
+	queryArgs  [][]any
+	execArgs   [][]any
 }
 
-func (f *scriptedTx) QueryRow(context.Context, string, ...any) pgx.Row {
+func (f *scriptedTx) QueryRow(_ context.Context, _ string, args ...any) pgx.Row {
+	f.queryArgs = append(f.queryArgs, args)
 	r := f.rows[0]
 	f.rows = f.rows[1:]
 	return r
 }
-func (f *scriptedTx) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+func (f *scriptedTx) Exec(_ context.Context, _ string, args ...any) (pgconn.CommandTag, error) {
+	f.execArgs = append(f.execArgs, args)
 	i := f.execCalls
 	f.execCalls++
 	if i < len(f.execErrors) {
@@ -330,9 +337,126 @@ func TestTransactionFailures(t *testing.T) {
 				t.Fatal(err)
 			}
 			removed := false
-			err = s.Purge(context.Background(), testUser, func(context.Context) error { removed = true; return nil })
+			err = s.Purge(context.Background(), testUser, func(context.Context, string) error { removed = true; return nil })
 			if !errors.Is(err, tc.want) || removed != tc.removed {
 				t.Fatalf("error %v want %v, removed %v", err, tc.want, removed)
+			}
+		})
+	}
+}
+
+type recordingReader struct{ ids []string }
+
+func (r *recordingReader) QueryRow(_ context.Context, _ string, args ...any) pgx.Row {
+	r.ids = append(r.ids, args[0].(string))
+	return fakeRow{deleted: true}
+}
+func TestCanonicalUUID(t *testing.T) {
+	ctx := context.Background()
+	upper := strings.ToUpper(testUser)
+	primary := &recordingReader{}
+	s, err := New(missingTx{}, primary, func() time.Time { return time.Unix(100, 0) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted, err := s.Deleted(ctx, upper); err != nil || !deleted {
+		t.Fatalf("Deleted %v %v", deleted, err)
+	}
+	if len(primary.ids) != 1 || primary.ids[0] != testUser {
+		t.Fatalf("read key %v", primary.ids)
+	}
+	for _, purge := range []bool{false, true} {
+		tx := &scriptedTx{rows: []scriptedRow{{value: "read committed"}, {value: false}}}
+		s.tx = fakeTxProvider{tx}
+		if purge {
+			called := false
+			err = s.Purge(ctx, upper, func(_ context.Context, id string) error {
+				called = true
+				if id != testUser {
+					t.Errorf("callback key %q", id)
+				}
+				return nil
+			})
+			if err != nil || !called {
+				t.Fatalf("Purge %v called %v", err, called)
+			}
+			if tx.execArgs[1][0] != testUser {
+				t.Fatalf("marker key %v", tx.execArgs)
+			}
+		} else {
+			if alive, err := s.Guard(ctx, upper); err != nil || !alive {
+				t.Fatalf("Guard %v %v", alive, err)
+			}
+		}
+		if tx.execArgs[0][0] != testUser || tx.queryArgs[1][0] != testUser {
+			t.Fatalf("lock/query keys %v %v", tx.execArgs, tx.queryArgs)
+		}
+	}
+	p := &fakePurger{}
+	handler, err := NewDeletionServer(fakeTransactor{}, p, func(_ context.Context, id string) error {
+		if id != testUser {
+			t.Errorf("RPC callback key %q", id)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := handler.PurgeUserData(ctx, &deletion.PurgeUserDataRequest{UserId: upper}); err != nil {
+		t.Fatal(err)
+	}
+	if p.id != testUser {
+		t.Fatalf("RPC store key %q", p.id)
+	}
+	if err := s.Purge(ctx, "invalid", func(context.Context, string) error { return nil }); !errors.Is(err, ErrUserID) {
+		t.Fatal(err)
+	}
+}
+
+func TestCancellationErrors(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		t.Run(map[bool]string{false: "canceled", true: "deadline"}[deadline], func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			if deadline {
+				cancel()
+				ctx, cancel = context.WithDeadline(context.Background(), time.Unix(0, 0))
+			}
+			cancel()
+			wantErr := ctx.Err()
+			wantCode := codes.Canceled
+			if deadline {
+				wantCode = codes.DeadlineExceeded
+			}
+			s, err := New(missingTx{}, fakeReader{err: errors.New("driver error")}, time.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Deleted(ctx, testUser); !errors.Is(err, wantErr) {
+				t.Fatalf("Deleted %v", err)
+			}
+			tx := &scriptedTx{rows: []scriptedRow{{err: errors.New("driver error")}}}
+			s.tx = fakeTxProvider{tx}
+			if _, err := s.Guard(ctx, testUser); !errors.Is(err, wantErr) {
+				t.Fatalf("Guard %v", err)
+			}
+			unary, stream, err := Interceptors(&fakeChecker{err: wantErr}, func(context.Context) string { return testUser }, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = unary(ctx, nil, &grpc.UnaryServerInfo{}, func(context.Context, any) (any, error) { t.Error("canceled handler ran"); return nil, nil })
+			if status.Code(err) != wantCode || len(status.Convert(err).Details()) != 0 {
+				t.Fatalf("unary %v", err)
+			}
+			err = stream(nil, fakeStream{ctx: ctx}, &grpc.StreamServerInfo{}, func(any, grpc.ServerStream) error { t.Error("canceled stream ran"); return nil })
+			if status.Code(err) != wantCode {
+				t.Fatalf("stream %v", err)
+			}
+			handler, err := NewDeletionServer(fakeTransactor{err: wantErr}, &fakePurger{}, func(context.Context, string) error { t.Error("canceled removal ran"); return nil })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := handler.PurgeUserData(ctx, &deletion.PurgeUserDataRequest{UserId: testUser}); status.Code(err) != wantCode {
+				t.Fatalf("PurgeUserData %v", err)
 			}
 		})
 	}

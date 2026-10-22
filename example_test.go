@@ -40,7 +40,7 @@ func ExampleStore_Guard() {
 func ExampleStore_Purge() {
 	var store *tombstone.Store
 	purge := func(ctx context.Context, userID string) error {
-		return store.Purge(ctx, userID, func(ctx context.Context) error {
+		return store.Purge(ctx, userID, func(ctx context.Context, canonicalUserID string) error {
 			return nil // Delete all user-owned service rows using the transaction in ctx.
 		})
 	}

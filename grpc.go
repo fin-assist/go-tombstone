@@ -36,7 +36,7 @@ func Interceptors(check Checker, user UserFromContext, revoked prometheus.Counte
 		}
 		deleted, err := check.Deleted(ctx, id)
 		if err != nil {
-			return internalError()
+			return rpcError(err)
 		}
 		if deleted {
 			if revoked != nil {
@@ -82,7 +82,7 @@ type Transactor interface {
 
 // Purger is implemented by Store. remove must participate in the current transaction.
 type Purger interface {
-	Purge(context.Context, string, func(context.Context) error) error
+	Purge(context.Context, string, func(context.Context, string) error) error
 }
 
 // DeletionServer implements the generated PurgeUserData RPC. Install identity/ACL
@@ -105,16 +105,21 @@ func NewDeletionServer(tx Transactor, store Purger, remove func(context.Context,
 }
 
 // PurgeUserData atomically deletes service data and writes the tombstone. Replays
-// return OK. All internal failures are sanitized; the service logs errors separately.
+// return OK. Cancellation and deadlines retain their gRPC codes. Other internal
+// failures are sanitized; the service logs errors separately.
 func (s *DeletionServer) PurgeUserData(ctx context.Context, req *deletion.PurgeUserDataRequest) (*deletion.PurgeUserDataResponse, error) {
-	if req == nil || validID(req.GetUserId()) != nil {
+	if req == nil {
 		return nil, internalError()
 	}
-	err := s.transactions.Within(ctx, func(ctx context.Context) error {
-		return s.store.Purge(ctx, req.GetUserId(), func(ctx context.Context) error { return s.remove(ctx, req.GetUserId()) })
-	})
+	id, err := canonicalID(req.GetUserId())
 	if err != nil {
 		return nil, internalError()
+	}
+	err = s.transactions.Within(ctx, func(ctx context.Context) error {
+		return s.store.Purge(ctx, id, s.remove)
+	})
+	if err != nil {
+		return nil, rpcError(err)
 	}
 	return &deletion.PurgeUserDataResponse{}, nil
 }
@@ -122,4 +127,11 @@ func (s *DeletionServer) PurgeUserData(ctx context.Context, req *deletion.PurgeU
 func internalError() error {
 	//nolint:forbidigo // Internal refusal deliberately carries no client-facing ErrorInfo or storage details.
 	return status.Error(codes.Internal, "internal error")
+}
+
+func rpcError(err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return status.FromContextError(err).Err()
+	}
+	return internalError()
 }
