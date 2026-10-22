@@ -36,7 +36,7 @@ func Interceptors(check Checker, user UserFromContext, revoked prometheus.Counte
 		}
 		deleted, err := check.Deleted(ctx, id)
 		if err != nil {
-			return rpcError(err)
+			return rpcError(ctx, err)
 		}
 		if deleted {
 			if revoked != nil {
@@ -119,7 +119,7 @@ func (s *DeletionServer) PurgeUserData(ctx context.Context, req *deletion.PurgeU
 		return s.store.Purge(ctx, id, s.remove)
 	})
 	if err != nil {
-		return nil, rpcError(err)
+		return nil, rpcError(ctx, err)
 	}
 	return &deletion.PurgeUserDataResponse{}, nil
 }
@@ -129,9 +129,9 @@ func internalError() error {
 	return status.Error(codes.Internal, "internal error")
 }
 
-func rpcError(err error) error {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return status.FromContextError(err).Err()
+func rpcError(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+		return status.FromContextError(ctxErr).Err()
 	}
 	return internalError()
 }

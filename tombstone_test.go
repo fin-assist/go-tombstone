@@ -3,6 +3,7 @@ package tombstone
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -457,6 +458,57 @@ func TestCancellationErrors(t *testing.T) {
 			}
 			if _, err := handler.PurgeUserData(ctx, &deletion.PurgeUserDataRequest{UserId: testUser}); status.Code(err) != wantCode {
 				t.Fatalf("PurgeUserData %v", err)
+			}
+		})
+	}
+}
+
+func TestCancellationMessagesNeverExposeServiceErrors(t *testing.T) {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, expire := context.WithDeadline(context.Background(), time.Unix(0, 0))
+	defer expire()
+	for _, tc := range []struct {
+		name    string
+		ctx     context.Context
+		cause   error
+		code    codes.Code
+		message string
+	}{
+		{"request canceled", canceled, context.Canceled, codes.Canceled, "context canceled"},
+		{"request expired", expired, context.DeadlineExceeded, codes.DeadlineExceeded, "context deadline exceeded"},
+		{"internal timeout", context.Background(), context.DeadlineExceeded, codes.Internal, "internal error"},
+		{"internal cancellation", context.Background(), context.Canceled, codes.Internal, "internal error"},
+		{"different cancellation", canceled, context.DeadlineExceeded, codes.Internal, "internal error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := fmt.Errorf("secret SQL DELETE operations user %s: %w", testUser, tc.cause)
+			assertSafe := func(err error) {
+				t.Helper()
+				s := status.Convert(err)
+				if s.Code() != tc.code || s.Message() != tc.message || len(s.Details()) != 0 {
+					t.Fatalf("unsafe or incorrect status: %v", err)
+				}
+			}
+			unary, stream, err := Interceptors(&fakeChecker{err: wrapped}, func(context.Context) string { return testUser }, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = unary(tc.ctx, nil, &grpc.UnaryServerInfo{}, func(context.Context, any) (any, error) { t.Error("handler ran"); return nil, nil })
+			assertSafe(err)
+			err = stream(nil, fakeStream{ctx: tc.ctx}, &grpc.StreamServerInfo{}, func(any, grpc.ServerStream) error { t.Error("stream handler ran"); return nil })
+			assertSafe(err)
+			for _, transactionError := range []bool{false, true} {
+				tx := fakeTransactor{}
+				if transactionError {
+					tx.err = wrapped
+				}
+				handler, err := NewDeletionServer(tx, &fakePurger{}, func(context.Context, string) error { return wrapped })
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = handler.PurgeUserData(tc.ctx, &deletion.PurgeUserDataRequest{UserId: testUser})
+				assertSafe(err)
 			}
 		})
 	}
