@@ -253,3 +253,13 @@ func open(t testing.TB, dsn, table string, fsys fs.FS) *migrate.Migrate {
 	}
 	return m
 }
+
+// Apply runs a library source through golang-migrate, using its separate version
+// table, as the service's migration runner does. It is intended for usage tests.
+func Apply(t testing.TB, dsn, table string, fsys fs.FS) {
+	t.Helper()
+	m := open(t, dsn, table, fsys)
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		t.Fatal(err)
+	}
+}
