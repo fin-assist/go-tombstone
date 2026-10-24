@@ -19,7 +19,7 @@ doc.go               package documentation: what the library does and what it ne
 migrations.go        Migrations, MigrationsName, MigrationsTable for the service's migration runner
 migrations/          SQL migrations of the library, embedded (NNN_name.up.sql / .down.sql)
 internal/pgtest/     PostgreSQL for tests and the up -> down -> up check, same rules as the service runner
-scripts/             coverage of changed lines, CHANGELOG checks (Python, standard library)
+scripts/             native statements coverage and suite guards, CHANGELOG checks (Python, standard library)
 docs/releasing.md    versions and releases
 ```
 
@@ -52,7 +52,7 @@ Prometheus, `google/uuid` (разбор и нормализация UUID, кот
 Сервисный адаптер `Within(ctx, fn)` для `Transactor` должен вызвать `postgres.DB.Run`
 с READ COMMITTED, откатить транзакцию при любой ошибке и вернуть nil только после commit.
 `Tx(ctx)` и callback обязаны видеть одну и ту же транзакцию в контексте.
-Полный рабочий адаптер и сборка gRPC показаны в `integration_test.go`, `TestServiceUsageOverGRPC`.
+Полный рабочий адаптер и сборка gRPC показаны в `integration_test.go`, `TestIntegrationServiceUsageOverGRPC`.
 
 ### Интерцепторы и удаление
 
@@ -172,7 +172,7 @@ CI (`.github/workflows/ci.yml`):
 
 | Job | Что |
 |---|---|
-| `go` | `go mod tidy` без изменений, `go vet`, `go test -race` с PostgreSQL 18 в Docker (testcontainers), включая «вверх → вниз → вверх» для миграций; тесты скриптов; формат `CHANGELOG.md`; общее покрытие и покрытие изменённых строк — в сводке прогона и комментарием в PR |
+| `go` | `go mod tidy` без изменений, `go vet`, `go test -race` с PostgreSQL 18 в Docker (testcontainers), включая «вверх → вниз → вверх» для миграций; тесты скриптов; формат `CHANGELOG.md`; три независимых statements gate80, профили и отчёты в artifacts/summary |
 | `lint` | golangci-lint (`.golangci.yml`): `forbidigo` против обхода `finerr` и против глобальных логгера, реестра метрик и переменных окружения; `depguard` против фреймворков |
 | `api` | `gorelease`: изменения экспортируемого API против последнего тега и предлагаемая версия; на PR выпуска — проверка номера из `CHANGELOG.md` |
 | `migrations` (PR) | существующие миграции не изменены, squawk по новым |
@@ -184,15 +184,19 @@ CI (`.github/workflows/ci.yml`):
 ```bash
 make test          # Docker for testcontainers, or TEST_DATABASE_URL=postgres://... to use your PostgreSQL
 make lint
-make cover         # cover.out and the table of changed lines against origin/main
+make cover         # independent unit/integration/API total80 gates
 make api           # API changes against the latest tag
 make release-check VERSION=v0.2.0
 ```
 
-Цель покрытия — не ниже **80 %** изменённых исполняемых строк production-кода; CI не падает, порог проверяется на ревью (AGENTS.md, Tests). Модули `github.com/fin-assist/*` берутся из git, минуя прокси (`GOPRIVATE`, задан в `Makefile` и CI).
+Каждый уровень независимо требует минимум 80 % statements всего production-кода; required check `go` проверяет пороги автоматически. Модули `github.com/fin-assist/*` берутся из git, минуя прокси (`GOPRIVATE`, задан в `Makefile` и CI).
 
-### Общее покрытие и изменённые строки
+### Независимое покрытие statements (FIN-243)
 
-CI публикует разделы «Покрытие проекта» и «Покрытие изменённых строк» в сводке запуска и одном обновляемом комментарии PR. Оба раздела используют один профиль корневого Go-модуля, без повторного запуска тестов; на push сохраняется общее покрытие. Комментарий для PR из fork не записывается. При ошибке построения или пустом файле отчёта последний корректный комментарий сохраняется.
+`make cover-unit`, `make cover-integration` и `make cover-api` независимо требуют **80 % statements** всего production-кода `./...`, включая `internal/pgtest`, без исключений. Unit работает без сети и БД; integration проверяет реальные зависимости; API использует публичный Go API из внешнего тестового пакета и caller-owned PostgreSQL-транзакции. Существующие внутренние usage-тесты остаются integration.
 
-Метрика — уникальные строки внутри блоков Go-профиля с ненулевым числом statements, а не процент statements из `go tool cover`. `_test.go` и `testdata/` исключены; сгенерированный production-код включён на тех же условиях. Повторные блоки разных тестовых бинарей объединяются: достаточно одного выполнения. Без исполняемых строк отчёт сообщает «Нет данных», а не 100 %. Цель **80 %** относится только к изменённым строкам и проверяется на ревью; общий процент её не заменяет.
+Коллекторы используют одинаковый `-coverpkg=./...`, `-race -count=1 -timeout=8m` и селекторы `TestUnit`/`FuzzUnit`, `TestIntegration`/`FuzzIntegration`, `TestAPI`/`FuzzAPI`; исполняемые `Example` входят в API (обычные примеры без Output только компилируются). `make test-names` проверяет race inventory перед каждым коллектором. JSON execution guard требует реально выполненные успешные Test и отклоняет fail/skip; profile guard отклоняет отсутствующий, пустой, header-only и zero-statement профиль. Обычные пакеты без тестов допустимы. `CI=true` делает недоступную БД ошибкой.
+
+Анализатор закреплён: `go-test-coverage/v2 v2.20.1`; принято его округление **79,95 % → 80,0 %**. `make cover` собирает три профиля и проверяет каждый, `make cover-combined` строит только информационное объединение встроенным comma-profile механизмом инструмента. Низкий уровень нельзя компенсировать combined. Профили `unit.out`, `integration.out`, `api.out`, JSON и штатные отчёты сохраняются как artifacts и в summary. Required check `go` падает при ошибке любого suite/gate; PR-write права и комментарии coverage не нужны.
+
+`make test` сохраняет race-тесты всех уровней, vet, Python-тесты скриптов и CHANGELOG; `make lint`, `make api` и release/migration/Renovate checks сохраняются. Все тестовые запуски ограничиваются временем процесса. БД локально: Docker PostgreSQL18 или `TEST_DATABASE_URL`; пропуск не является успешной проверкой.

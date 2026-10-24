@@ -7,3 +7,10 @@ __pycache__/
 
 # Local Renovate runtime dependencies
 node_modules/
+
+# Native coverage reports (FIN-243)
+*.out
+*.jsonl
+*.coverage.txt
+*.report.txt
+test-names.txt
