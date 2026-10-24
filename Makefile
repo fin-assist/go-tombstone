@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 GO_TEST_COVERAGE_VERSION := v2.20.1
 TEST_TIMEOUT ?= 8m
-COVERAGE := go run github.com/vladopajic/go-test-coverage/v2@$(GO_TEST_COVERAGE_VERSION)
+COVERAGE := GOTOOLCHAIN=auto go run github.com/vladopajic/go-test-coverage/v2@$(GO_TEST_COVERAGE_VERSION)
 GOLANGCI_LINT_VERSION := v2.15.0
 GORELEASE := golang.org/x/exp/cmd/gorelease@v0.0.0-20261014143641-f0251eb4aa3e
 export GOPRIVATE := github.com/fin-assist/*

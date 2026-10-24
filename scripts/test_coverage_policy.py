@@ -28,7 +28,8 @@ class CoveragePolicyTests(unittest.TestCase):
                         f"example.com/policy/policy.go:4.18,4.27 {missed} 0\n")
                     result = subprocess.run(command + ["--profile", "coverage.out",
                                                         "--threshold-total", "80"],
-                                            cwd=root, capture_output=True, text=True, timeout=180)
+                                            cwd=root, capture_output=True, text=True, timeout=180,
+                                            env={**os.environ, "GOTOOLCHAIN": "auto"})
                     self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
 
 
