@@ -37,6 +37,7 @@ for itself: what it does, its YouTrack issue, which services use it.
 | Implementation details | `internal/` |
 | Migration source for the service runner (`Migrations`, `MigrationsName`, `MigrationsTable`) | `migrations.go`, `migrations/` |
 | Usage and concurrent deletion/write tests | `integration_test.go` (real primary, service-owned transaction adapter, generated gRPC clients) |
+| Public consumer composition with the published go-postgres.Manager | `fin244_manager*_test.go` (shared transaction, COMMIT/rollback, ownership, lock exclusion and pool cleanup) |
 | PostgreSQL for tests, up → down → up check | `internal/pgtest/` (mirrors `migratetest` of the service template) |
 | Integration guide for services | `README.md`, «Внедрение» |
 | Versions, compatibility, releases, Renovate | `docs/releasing.md`, `CHANGELOG.md`, `.github/workflows/release.yml`, `renovate.json` |
