@@ -136,7 +136,9 @@ func TestAPIConsumerAtomicDeletionAndAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	metrics, err := reg.Gather()
-	if err != nil || len(metrics) != 1 || metrics[0].Metric[0].GetCounter().GetValue() != 2 {
+	if err != nil || len(metrics) != 1 || metrics[0].GetName() != "finassist_tombstone_revoked_total" ||
+		len(metrics[0].Metric) != 1 || len(metrics[0].Metric[0].GetLabel()) != 0 ||
+		metrics[0].Metric[0].GetCounter().GetValue() != 2 {
 		t.Fatalf("revoked metric %v %v", metrics, err)
 	}
 	handler, err := tombstone.NewDeletionServer(db, store, remove)
