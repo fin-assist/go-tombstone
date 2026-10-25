@@ -39,10 +39,11 @@ func (d consumerDB) Within(ctx context.Context, fn func(context.Context) error) 
 }
 func publicStore(t *testing.T) (context.Context, consumerDB, *tombstone.Store) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	t.Cleanup(cancel)
+	// The first DSN call may start a PostgreSQL container; only the scenario gets the deadline.
 	dsn := pgtest.DSN(t)
 	pgtest.Apply(t, dsn, tombstone.MigrationsTable, tombstone.Migrations)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		t.Fatal(err)
