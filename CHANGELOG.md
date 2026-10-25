@@ -1,11 +1,12 @@
 # Изменения
 
-Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии и выпуск — [docs/releasing.md](docs/releasing.md). Каждый PR, который меняет API или поведение библиотеки, добавляет строку в «Unreleased»; при выпуске раздел получает номер версии и дату.
+Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии и выпуск — [docs/releasing.md](docs/releasing.md). Каждый PR библиотеки, включая документацию, тесты и CI, добавляет строку в «Unreleased»; исключение — полностью ботские PR Renovate только с зависимостями, их сводку по `go.mod` добавляет PR выпуска. При выпуске раздел получает номер версии и дату.
 
 ## [Unreleased]
 
 ### Изменено
 
+- FIN-336 (FIN-308, FIN-309): из go-library-template перенесены запреты `forbidigo`/`depguard` на глобальное состояние (FIN-294) с `scripts/test_lint_policy.py`, защита CI (FIN-301: `persist-credentials: false` у checkout в `lint`, `api`, `migrations`; `github.base_ref` передаётся через `env`) с `scripts/test_workflow_hardening.py`, правила `docs/releasing.md` и вступление CHANGELOG (FIN-307: строка в `[Unreleased]` от каждого PR, заголовок PR выпуска с ключом FIN, сводка Renovate-изменений `go.mod` в PR выпуска). Нарушений новых запретов в коде не найдено; runtime и экспортируемый API не менялись.
 - FIN-319: `internal/pgtest` больше не копирует go-migrate (по FIN-310): оставлен только выбор тестового PostgreSQL (`TEST_DATABASE_URL`/testcontainers, skip локально, ошибка в CI), создание БД, правила файлов и обход up → down → up, а также применение источника в usage-тестах (`Apply`) делегированы `github.com/fin-assist/go-migrate` v0.1.1. go-migrate импортируется только тестами, но как require модуля входит в граф модулей и повышает минимальную версию go-migrate у сервисов, импортирующих библиотеку (сервисы уже на v0.1.1). Отрицательный интеграционный тест закрепляет, что `Apply` завершает тест при ошибке `migrate.Up`. Исключение `internal/pgtest` из покрытия не изменилось; runtime и экспортируемый API не менялись.
 - FIN-243: независимые unit/integration/API statements gates 80 % production-пакетов (по согласованию исключён только internal/pgtest), защита от пустых suite и содержательные тесты публичного API; прежний coverage-diff удалён. Runtime и экспортируемый API не изменены.
 - FIN-312: записи, вошедшие в уже выпущенный тег v0.1.0, перенесены из «Unreleased» в секцию v0.1.0; в docs/releasing.md записано исключение для GitHub Release v0.1.0. Runtime, API и теги не изменены.
