@@ -54,6 +54,42 @@ Prometheus, `google/uuid` (разбор и нормализация UUID, кот
 `Tx(ctx)` и callback обязаны видеть одну и ту же транзакцию в контексте.
 Полный рабочий адаптер и сборка gRPC показаны в `integration_test.go`, `TestServiceUsageOverGRPC`.
 
+### Композиция с go-postgres
+
+Сервис может передать общий [`go-postgres.Manager`](https://github.com/fin-assist/go-postgres)
+как `Transactions`. Опубликованная `v0.1.2` также освобождает транзакцию при
+`runtime.Goexit`. Зависимость используется здесь только в тестах и примере;
+публичные интерфейсы tombstone не требуют конкретного менеджера.
+Для `DeletionServer` достаточно адаптера имени метода:
+
+```go
+type deletionTransactions struct { *postgres.Manager }
+
+func (t deletionTransactions) Within(ctx context.Context, fn func(context.Context) error) error {
+    return t.RunWith(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
+}
+
+manager := postgres.New(primary) // github.com/fin-assist/go-postgres
+store, err := tombstone.New(manager, primary, clock) // check err
+runner := deletionTransactions{manager}
+// Pass runner to NewDeletionServer; removal uses manager.Tx(ctx).
+```
+
+Этот же экземпляр Manager передают адаптерам бизнес-записей. Запись вызывает
+`store.Guard(ctx, userID)` внутри `Run` **до** изменения данных и использует
+`manager.Tx(ctx)`. Отдельный менеджер для удаления не создаётся: другой экземпляр
+не принимает чужой транзакционный контекст. Вложенный `Run` присоединяется к внешней
+транзакции без промежуточного commit; окончательное решение принимает её владелец.
+Внешний вызов должен выбирать READ COMMITTED: параметры вложенного `RunWith`
+не меняют уже начатую транзакцию, а Guard отклоняет неподходящую изоляцию.
+
+`fin244_manager*_test.go` проверяют эту сборку через публичный API и настоящий
+PostgreSQL: атомарный commit/rollback бизнес-записей и tombstone, отложенный FK на
+фактическом COMMIT, конкуренцию удаления с записью, чужой Manager и освобождение
+соединения после panic, отмены и Goexit. Тест gRPC проверяет обезличенный INTERNAL
+при ошибке COMMIT и повтор после успешного удаления; identity/ACL остаются
+обязанностью сервиса. Пример — `ExampleNew_goPostgres`.
+
 ### Интерцепторы и удаление
 
 ```go
