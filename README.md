@@ -124,7 +124,7 @@ userdeletionv1.RegisterUserDeletionServiceServer(server, deletions)
 возвращает OK, callback повторно не выполняется. `user.DeleteAccount` вызывает `Purge`
 в своей транзакции вместе с отзывом refresh-токенов и созданием outbox.
 
-Этот раздел — для сервера без go-grpc; с ним — «Сборка с go-grpc» ниже. Unary и stream интерцепторы читают primary при каждом новом вызове. Tombstone даёт
+Абзац об `Interceptors` ниже — только для сервера без go-grpc (с ним — «Сборка с go-grpc»); `NewDeletionServer`, регистрация `UserDeletionService` и ACL `PurgeUserData` выше нужны в обоих случаях. Unary и stream интерцепторы читают primary при каждом новом вызове. Tombstone даёт
 `UNAUTHENTICATED` с `ErrorInfo{domain: "finassist", reason: "TOKEN_REVOKED"}` через `finerr`.
 Сбой чтения закрывает доступ (INTERNAL), обработчик не вызывается. Отмена и дедлайн
 самого запроса сохраняют собственные коды и не считаются ошибками хранилища. Текст
@@ -157,13 +157,15 @@ srv, err := server.New(opts, server.Deps{ /* ... */ Tombstones: deletedUsers{sto
 - Двойная проверка не нужна: вместе с go-grpc `Interceptors` библиотеки не ставятся.
 - Отличия от `Interceptors`: сбой чтения tombstone go-grpc отдаёт голым `UNAVAILABLE`
   (обработчик не вызван, повтор безопасен), а не `INTERNAL`; `TOKEN_REVOKED` строит сам go-grpc
-  через `finerr`. Любая ошибка `IsDeleted`, включая отмену запроса, у go-grpc — тот же `UNAVAILABLE`.
+  через `finerr`. Любая ошибка `IsDeleted`, включая отмену запроса, у go-grpc — тот же `UNAVAILABLE`. В том числе `ErrUserID`: проверенный `sub`, который не является UUID, даёт `UNAVAILABLE`, а не `INTERNAL`.
 - `Rule.AllowDeleted` go-grpc пропускает удалённого пользователя только на явных
   cleanup-методах (например, `user` `DeleteAccount`), но `IsDeleted` вызывается и для них.
   Поэтому адаптер не должен считать `finassist_tombstone_revoked_total` в сервисе с такими
   методами: в счётчик попали бы разрешённые вызовы. Отказы admission видны в RED-метрике
-  go-grpc с `reason="TOKEN_REVOKED"`; счётчик библиотеки остаётся для `Interceptors` и отказов
+  go-grpc `grpc_server_handled_total{reason="TOKEN_REVOKED"}`; счётчик библиотеки остаётся для `Interceptors` и отказов
   после Guard. Без `AllowDeleted` адаптер может увеличивать его при `deleted == true`.
+- `DeletionServer` регистрируется на go-grpc сервере так же (`userdeletionv1.RegisterUserDeletionServiceServer(srv.GRPC(), deletions)`),
+  а в `AccessPolicy()` для `PurgeUserData` нужно правило `{Callers: []string{"user"}, Model: server.ModelSystem}` — только вызывающий `user`.
 - Системные вызовы (`ModelSystem`) go-grpc на admission не проверяет — как и `Interceptors`
   с пустым `verifiedUser`; их записи защищает Guard (ниже).
 
@@ -231,7 +233,7 @@ outbox не ограничена: конечный TTL снова разреши
 - Таблица с user_id включена в callback PurgeUserData, её фоновые задания отменяются там же.
 - Любой путь записи (RPC, поток, фон, миграционный backfill, событие) вызывает Guard
   в той же READ COMMITTED транзакции, что и эффект, и корректно обрабатывает `!alive`.
-- Чтения новых RPC проходят unary/stream tombstone interceptor после identity/ACL.
+- Чтения новых RPC проходят tombstone admission после identity/ACL: либо `tombstone.Interceptors`, либо шаг go-grpc через `server.Tombstones` — не оба сразу.
 - Системный receiver после tombstone возвращает OK без эффекта; пользовательский путь — TOKEN_REVOKED.
 - Новая зависимая таблица покрыта тестом удаления, повтора, rollback и конкурентной записи.
 
