@@ -9,6 +9,7 @@
 - FIN-319: `internal/pgtest` больше не копирует go-migrate (по FIN-310): оставлен только выбор тестового PostgreSQL (`TEST_DATABASE_URL`/testcontainers, skip локально, ошибка в CI), создание БД, правила файлов и обход up → down → up, а также применение источника в usage-тестах (`Apply`) делегированы `github.com/fin-assist/go-migrate` v0.1.1. go-migrate импортируется только тестами, но как require модуля входит в граф модулей и повышает минимальную версию go-migrate у сервисов, импортирующих библиотеку (сервисы уже на v0.1.1). Отрицательный интеграционный тест закрепляет, что `Apply` завершает тест при ошибке `migrate.Up`. Исключение `internal/pgtest` из покрытия не изменилось; runtime и экспортируемый API не менялись.
 - FIN-243: независимые unit/integration/API statements gates 80 % production-пакетов (по согласованию исключён только internal/pgtest), защита от пустых suite и содержательные тесты публичного API; прежний coverage-diff удалён. Runtime и экспортируемый API не изменены.
 - FIN-312: записи, вошедшие в уже выпущенный тег v0.1.0, перенесены из «Unreleased» в секцию v0.1.0; в docs/releasing.md записано исключение для GitHub Release v0.1.0. Runtime, API и теги не изменены.
+- FIN-295: README «Внедрение» описывает подключение через go-grpc `server.Tombstones`: адаптер над `Store.Deleted` без кэша, отличие кода сбоя (`UNAVAILABLE`), учёт метрики при `AllowDeleted`. Runtime и экспортируемый API не изменены.
 
 ### Добавлено
 
@@ -18,7 +19,6 @@
 
 ### Изменено
 
-- FIN-295: README «Внедрение» описывает подключение через go-grpc `server.Tombstones`: адаптер над `Store.Deleted` без кэша, отличие кода сбоя (`UNAVAILABLE`), учёт метрики при `AllowDeleted`. Runtime и экспортируемый API не изменены.
 - FIN-214: правило Squawk prefer-bigint-over-int отключено для репозитория; размер целочисленного типа выбирается по диапазону домена.
 
 ### Добавлено
