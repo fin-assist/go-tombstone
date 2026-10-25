@@ -35,10 +35,11 @@ type managerFixture struct {
 
 func newManagerFixture(t *testing.T, connections int32) *managerFixture {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	t.Cleanup(cancel)
+	// The first DSN call may start a PostgreSQL container; only the scenario gets the deadline.
 	dsn := pgtest.DSN(t)
 	pgtest.Apply(t, dsn, tombstone.MigrationsTable, tombstone.Migrations)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		t.Fatal(err)
