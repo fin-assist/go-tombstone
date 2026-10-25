@@ -59,7 +59,7 @@ type missingTx struct{}
 
 func (missingTx) Tx(context.Context) (pgx.Tx, bool) { return nil, false }
 
-func TestStoreValidation(t *testing.T) {
+func TestUnitStoreValidation(t *testing.T) {
 	ctx := context.Background()
 	now := func() time.Time { return time.Unix(100, 0) }
 	for _, tc := range []struct {
@@ -105,7 +105,7 @@ func TestStoreValidation(t *testing.T) {
 	}
 }
 
-func TestInterceptors(t *testing.T) {
+func TestUnitInterceptors(t *testing.T) {
 	for _, tc := range []struct{ system, deleted, failed bool }{{}, {deleted: true}, {failed: true}, {system: true, deleted: true}} {
 		t.Run("admission", func(t *testing.T) {
 			check := &fakeChecker{deleted: tc.deleted}
@@ -216,7 +216,7 @@ func (f *fakePurger) Purge(ctx context.Context, id string, remove func(context.C
 	}
 	return remove(ctx, id)
 }
-func TestDeletionServer(t *testing.T) {
+func TestUnitDeletionServer(t *testing.T) {
 	remove := func(context.Context, string) error { return nil }
 	p := &fakePurger{}
 	if _, err := NewDeletionServer(nil, p, remove); err == nil {
@@ -314,7 +314,7 @@ func (f *scriptedTx) Exec(_ context.Context, _ string, args ...any) (pgconn.Comm
 	}
 	return pgconn.CommandTag{}, nil
 }
-func TestTransactionFailures(t *testing.T) {
+func TestUnitTransactionFailures(t *testing.T) {
 	boom := errors.New("secret SQL")
 	for _, tc := range []struct {
 		name    string
@@ -352,7 +352,7 @@ func (r *recordingReader) QueryRow(_ context.Context, _ string, args ...any) pgx
 	r.ids = append(r.ids, args[0].(string))
 	return fakeRow{deleted: true}
 }
-func TestCanonicalUUID(t *testing.T) {
+func TestUnitCanonicalUUID(t *testing.T) {
 	ctx := context.Background()
 	upper := strings.ToUpper(testUser)
 	primary := &recordingReader{}
@@ -414,7 +414,7 @@ func TestCanonicalUUID(t *testing.T) {
 	}
 }
 
-func TestCancellationErrors(t *testing.T) {
+func TestUnitCancellationErrors(t *testing.T) {
 	for _, deadline := range []bool{false, true} {
 		t.Run(map[bool]string{false: "canceled", true: "deadline"}[deadline], func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -463,7 +463,7 @@ func TestCancellationErrors(t *testing.T) {
 	}
 }
 
-func TestCancellationMessagesNeverExposeServiceErrors(t *testing.T) {
+func TestUnitCancellationMessagesNeverExposeServiceErrors(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	expired, expire := context.WithDeadline(context.Background(), time.Unix(0, 0))

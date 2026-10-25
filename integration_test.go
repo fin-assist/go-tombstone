@@ -85,7 +85,7 @@ func writeData(ctx context.Context, db testDB, s *Store, id string) error {
 	_, err = tx.Exec(ctx, "INSERT INTO service_data VALUES ($1,'value') ON CONFLICT DO NOTHING", id)
 	return err
 }
-func TestPostgresPurgeReplayRollbackAndSystemEvent(t *testing.T) {
+func TestIntegrationPostgresPurgeReplayRollbackAndSystemEvent(t *testing.T) {
 	ctx, db, s := setup(t)
 	if err := db.Within(ctx, func(ctx context.Context) error { return writeData(ctx, db, s, testUser) }); err != nil {
 		t.Fatal(err)
@@ -172,7 +172,7 @@ func TestPostgresPurgeReplayRollbackAndSystemEvent(t *testing.T) {
 	}
 }
 
-func TestConcurrentWritesCannotResurrect(t *testing.T) {
+func TestIntegrationConcurrentWritesCannotResurrect(t *testing.T) {
 	for _, writerFirst := range []bool{true, false} {
 		t.Run(map[bool]string{true: "write first", false: "purge first"}[writerFirst], func(t *testing.T) {
 			ctx, db, s := setup(t)
@@ -233,7 +233,7 @@ func (s profileServer) GetProfile(context.Context, *user.GetProfileRequest) (*us
 	*s.called = true
 	return &user.GetProfileResponse{}, nil
 }
-func TestServiceUsageOverGRPC(t *testing.T) {
+func TestIntegrationServiceUsageOverGRPC(t *testing.T) {
 	ctx, db, s := setup(t)
 	auth, err := identity.NewServer(identity.AccessTable{
 		user.ProfileService_GetProfile_FullMethodName:             {"bank-bff": identity.User},
@@ -370,7 +370,7 @@ func waitForAdvisory(t *testing.T, ctx context.Context, pool *pgxpool.Pool, pid 
 	}
 }
 
-func TestConcurrentPurgeCanonicalUUID(t *testing.T) {
+func TestIntegrationConcurrentPurgeCanonicalUUID(t *testing.T) {
 	ctx, db, s := setup(t)
 	if err := db.Within(ctx, func(ctx context.Context) error { return writeData(ctx, db, s, testUser) }); err != nil {
 		t.Fatal(err)
@@ -435,7 +435,7 @@ func TestConcurrentPurgeCanonicalUUID(t *testing.T) {
 	}
 }
 
-func TestGuardCancellationWhileWaiting(t *testing.T) {
+func TestIntegrationGuardCancellationWhileWaiting(t *testing.T) {
 	ctx, db, s := setup(t)
 	holder, err := db.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {

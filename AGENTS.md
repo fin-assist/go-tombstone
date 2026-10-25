@@ -41,7 +41,7 @@ for itself: what it does, its YouTrack issue, which services use it.
 | PostgreSQL for tests, up → down → up check | `internal/pgtest/` (mirrors `migratetest` of the service template) |
 | Integration guide for services | `README.md`, «Внедрение» |
 | Versions, compatibility, releases, Renovate | `docs/releasing.md`, `CHANGELOG.md`, `.github/workflows/release.yml`, `renovate.json` |
-| Coverage of changed lines, changelog checks | `scripts/` |
+| Native statements coverage, suite guards, changelog checks | `scripts/` |
 | CI, lint | `.github/workflows/ci.yml`, `.golangci.yml`, `.squawk.toml`, `Makefile` |
 | PR review by Claude | `.github/workflows/claude.yml` |
 
@@ -149,24 +149,26 @@ Also:
   connections, two goroutines released together, a transaction rolled back mid-way; no sleeps for synchronisation —
   wait on a channel or a condition with a deadline. Run with `-race`.
 - Tests assert behaviour; a test that only executes lines or asserts on a fake it set up itself is not coverage.
-- The measurable check is coverage of changed lines: at least 80 % of changed executable lines of production code
-  (`make cover`; CI posts the table in the PR). Uncovered changed lines are listed in the PR («Как проверено») with
-  the reason; an uncovered line without a reason is a review finding.
+- The measurable check is independent unit/integration/API coverage: at least 80% statements of the same production package inventory, excluding only the owner-approved internal/pgtest helper. See FIN-243 coverage policy below; meaningful scenarios remain the review criterion.
 
 ## Checks
 
-CI (table in `README.md`): `go mod tidy` clean, `go vet`, `go test -race` with PostgreSQL 18 in Docker and coverage
-of changed lines, script tests and the `CHANGELOG.md` format, golangci-lint, `gorelease` against the latest tag, and
+CI (table in `README.md`): `go mod tidy` clean, `go vet`, `go test -race` with PostgreSQL 18 in Docker and three independent statements coverage gates, script tests and the `CHANGELOG.md` format, golangci-lint, `gorelease` against the latest tag, and
 on PRs the migration checks (existing files unchanged, squawk on new ones). Run `make test` (or `make cover`),
 `make lint` and `make api` before pushing.
 
-### Coverage reports (FIN-210)
+### Независимое покрытие statements (FIN-243)
 
-CI reports project totals and changed executable lines together from the same profile of the root Go module in one
-updated PR comment and the run summary; push runs retain project totals. The 80% target remains for changed
-lines only. Count unique lines in blocks with nonzero statement counts, including generated production code;
-exclude `_test.go` and `testdata/`. An empty profile means no data, never 100%. Fork PRs cannot post comments.
-Test changes to the report with `python3 -m unittest discover -s scripts -p 'test_coverage_diff.py'`.
+Команды и точная область инструментирования — [docs/testing.md](docs/testing.md).
+
+`make cover-unit`, `make cover-integration` и `make cover-api` независимо требуют **80 % statements** production-кода всех пакетов `./...`, кроме единственного согласованного тестового helper `internal/pgtest`. Unit работает без сети и БД; integration проверяет реальные зависимости; API использует публичный Go API из внешнего тестового пакета и caller-owned PostgreSQL-транзакции. Существующие внутренние usage-тесты остаются integration.
+
+Коллекторы используют одинаковый список `-coverpkg`: штатный `go list -race ./...` перечисляет пакеты, исключается только точное имя `<module>/internal/pgtest`; одноимённые соседние пакеты остаются. Suite по-прежнему запускает `./...`, включая тесты helper. Analyzer не скрывает файлы. Коллекторы используют `-race -count=1 -timeout=8m` и селекторы `TestUnit`/`FuzzUnit`, `TestIntegration`/`FuzzIntegration`, `TestAPI`/`FuzzAPI`; исполняемые `Example` входят в API (обычные примеры без Output только компилируются). `make test-names` проверяет race inventory перед каждым коллектором. JSON execution guard требует реально выполненные успешные Test и отклоняет fail/skip; profile guard отклоняет отсутствующий, пустой, header-only и zero-statement профиль. Обычные пакеты без тестов допустимы. `CI=true` делает недоступную БД ошибкой.
+
+Профили собираются Go из `go.mod`. Только анализатор запускается с `GOTOOLCHAIN=auto`, поскольку требует Go1.27+, даже когда `setup-go` задаёт local; закреплён `go-test-coverage/v2 v2.20.1`; принято его округление **79,95 % → 80,0 %**. `make cover` собирает три профиля и проверяет каждый, `make cover-combined` строит только информационное объединение встроенным comma-profile механизмом инструмента. Низкий уровень нельзя компенсировать combined. Профили `unit.out`, `integration.out`, `api.out`, JSON и штатные отчёты сохраняются как artifacts и в summary. Required check `go` падает при ошибке любого suite/gate; PR-write права и комментарии coverage не нужны.
+
+`make test` сохраняет race-тесты всех уровней, vet, Python-тесты скриптов и CHANGELOG; `make lint`, `make api` и release/migration/Renovate checks сохраняются. Все тестовые запуски ограничиваются временем процесса. БД локально: Docker PostgreSQL18 или `TEST_DATABASE_URL`; пропуск не является успешной проверкой.
+
 
 ## Workflow
 
@@ -194,8 +196,8 @@ Test changes to the report with `python3 -m unittest discover -s scripts -p 'tes
   - `@codex` — the Codex GitHub integration under the owner's ChatGPT subscription. Its model is chosen by OpenAI
     and cannot be pinned from here; a pinned model would need the OpenAI API with per-token billing, which was
     declined (FIN-103).
-  - A review is requested only once `.github/workflows/claude.yml` is on `main`: comment-triggered workflows run
-    from the default branch.
+  - Claude is requested only once `.github/workflows/claude.yml` is on `main`: comment-triggered workflows run
+    from the default branch. Codex review is independent and is requested when its integration is available.
   - Replies in threads and other comments never mention `@codex` or `@claude`: any mention with text starts them
     again.
 - Waiting for the review: react to the PR's GitHub events when the session receives them; otherwise check 3 minutes
@@ -291,7 +293,7 @@ identifier, behaviour, migration and dependency check:
   existing file changed.
 - A new metric is `finassist_<library>_…` with bounded labels and is listed in the README.
 - No logger, registry, clock or setting is taken from process-wide state.
-- Changed lines the coverage comment of the PR shows as uncovered have a reason in the PR.
+- Each suite independently meets total80; remaining uncovered scenarios and any deficit are explained in the PR.
 
 ## Renovate automation
 
