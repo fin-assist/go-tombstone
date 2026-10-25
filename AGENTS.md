@@ -149,7 +149,7 @@ Also:
   connections, two goroutines released together, a transaction rolled back mid-way; no sleeps for synchronisation —
   wait on a channel or a condition with a deadline. Run with `-race`.
 - Tests assert behaviour; a test that only executes lines or asserts on a fake it set up itself is not coverage.
-- The measurable check is independent unit/integration/API coverage: at least 80% statements of the same whole production module, without exclusions. See FIN-243 coverage policy below; meaningful scenarios remain the review criterion.
+- The measurable check is independent unit/integration/API coverage: at least 80% statements of the same production package inventory, excluding only the owner-approved internal/pgtest helper. See FIN-243 coverage policy below; meaningful scenarios remain the review criterion.
 
 ## Checks
 
@@ -159,9 +159,11 @@ on PRs the migration checks (existing files unchanged, squawk on new ones). Run 
 
 ### Независимое покрытие statements (FIN-243)
 
-`make cover-unit`, `make cover-integration` и `make cover-api` независимо требуют **80 % statements** всего production-кода `./...`, включая `internal/pgtest`, без исключений. Unit работает без сети и БД; integration проверяет реальные зависимости; API использует публичный Go API из внешнего тестового пакета и caller-owned PostgreSQL-транзакции. Существующие внутренние usage-тесты остаются integration.
+Команды и точная область инструментирования — [docs/testing.md](docs/testing.md).
 
-Коллекторы используют одинаковый `-coverpkg=./...`, `-race -count=1 -timeout=8m` и селекторы `TestUnit`/`FuzzUnit`, `TestIntegration`/`FuzzIntegration`, `TestAPI`/`FuzzAPI`; исполняемые `Example` входят в API (обычные примеры без Output только компилируются). `make test-names` проверяет race inventory перед каждым коллектором. JSON execution guard требует реально выполненные успешные Test и отклоняет fail/skip; profile guard отклоняет отсутствующий, пустой, header-only и zero-statement профиль. Обычные пакеты без тестов допустимы. `CI=true` делает недоступную БД ошибкой.
+`make cover-unit`, `make cover-integration` и `make cover-api` независимо требуют **80 % statements** production-кода всех пакетов `./...`, кроме единственного согласованного тестового helper `internal/pgtest`. Unit работает без сети и БД; integration проверяет реальные зависимости; API использует публичный Go API из внешнего тестового пакета и caller-owned PostgreSQL-транзакции. Существующие внутренние usage-тесты остаются integration.
+
+Коллекторы используют одинаковый список `-coverpkg`: штатный `go list -race ./...` перечисляет пакеты, исключается только точное имя `<module>/internal/pgtest`; одноимённые соседние пакеты остаются. Suite по-прежнему запускает `./...`, включая тесты helper. Analyzer не скрывает файлы. Коллекторы используют `-race -count=1 -timeout=8m` и селекторы `TestUnit`/`FuzzUnit`, `TestIntegration`/`FuzzIntegration`, `TestAPI`/`FuzzAPI`; исполняемые `Example` входят в API (обычные примеры без Output только компилируются). `make test-names` проверяет race inventory перед каждым коллектором. JSON execution guard требует реально выполненные успешные Test и отклоняет fail/skip; profile guard отклоняет отсутствующий, пустой, header-only и zero-statement профиль. Обычные пакеты без тестов допустимы. `CI=true` делает недоступную БД ошибкой.
 
 Профили собираются Go из `go.mod`. Только анализатор запускается с `GOTOOLCHAIN=auto`, поскольку требует Go1.27+, даже когда `setup-go` задаёт local; закреплён `go-test-coverage/v2 v2.20.1`; принято его округление **79,95 % → 80,0 %**. `make cover` собирает три профиля и проверяет каждый, `make cover-combined` строит только информационное объединение встроенным comma-profile механизмом инструмента. Низкий уровень нельзя компенсировать combined. Профили `unit.out`, `integration.out`, `api.out`, JSON и штатные отчёты сохраняются как artifacts и в summary. Required check `go` падает при ошибке любого suite/gate; PR-write права и комментарии coverage не нужны.
 
