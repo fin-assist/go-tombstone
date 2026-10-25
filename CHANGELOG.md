@@ -9,6 +9,7 @@
 - FIN-243: независимые unit/integration/API statements gates 80 % production-пакетов (по согласованию исключён только internal/pgtest), защита от пустых suite и содержательные тесты публичного API; прежний coverage-diff удалён. Runtime и экспортируемый API не изменены.
 
 
+- FIN-295: README «Внедрение» описывает подключение через go-grpc `server.Tombstones`: адаптер над `Store.Deleted` без кэша, отличие кода сбоя (`UNAVAILABLE`), учёт метрики при `AllowDeleted`. Runtime и экспортируемый API не изменены.
 - FIN-214: правило Squawk prefer-bigint-over-int отключено для репозитория; размер целочисленного типа выбирается по диапазону домена.
 
 ### Добавлено
