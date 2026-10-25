@@ -39,7 +39,7 @@ for itself: what it does, its YouTrack issue, which services use it.
 | Usage and concurrent deletion/write tests | `integration_test.go` (real primary, service-owned transaction adapter, generated gRPC clients) |
 | Public consumer composition with the published go-postgres.Manager | `fin244_manager*_test.go` (shared transaction, COMMIT/rollback, ownership, lock exclusion and pool cleanup) |
 | PostgreSQL for tests, up → down → up check | `internal/pgtest/`: only server selection; databases, file rules and the walk delegate to the tagged `go-migrate` (`migratetest`, `migrate.Validate`, `migrate.Up`; FIN-319) |
-| Integration guide for services | `README.md`, «Внедрение» |
+| Integration guide for services | `README.md`, «Внедрение» (own gRPC chain or the go-grpc `server.Tombstones` adapter, «Сборка с go-grpc») |
 | Versions, compatibility, releases, Renovate | `docs/releasing.md`, `CHANGELOG.md`, `.github/workflows/release.yml`, `renovate.json` |
 | Native statements coverage, suite guards, changelog checks | `scripts/` |
 | CI, lint | `.github/workflows/ci.yml`, `.golangci.yml`, `.squawk.toml`, `Makefile` |
