@@ -26,13 +26,6 @@ import (
 
 const managerUser = "ae490c49-9bbf-410a-8bda-622befac3604"
 
-// managerWithin only adapts names. Run owns the transaction, including COMMIT.
-type managerWithin struct{ *postgres.Manager }
-
-func (m managerWithin) Within(ctx context.Context, fn func(context.Context) error) error {
-	return m.RunWith(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
-}
-
 type managerFixture struct {
 	ctx     context.Context
 	pool    *pgxpool.Pool
@@ -206,6 +199,56 @@ func TestAPIManagerPurgeCommitBoundary(t *testing.T) {
 				f.assertState(t, 1, 0, 0)
 			}
 		})
+	}
+}
+
+func TestAPIManagerNestedWithinPreservesOuterIsolation(t *testing.T) {
+	for _, isolation := range []pgx.TxIsoLevel{pgx.RepeatableRead, pgx.Serializable} {
+		for _, operation := range []string{"Guard", "Purge"} {
+			t.Run(string(isolation)+"/"+operation, func(t *testing.T) {
+				f := newManagerFixture(t, 1)
+				if err := f.manager.Run(f.ctx, f.write); err != nil {
+					t.Fatal(err)
+				}
+				nestedCalled, effectCalled := false, false
+				err := f.manager.RunWith(f.ctx, pgx.TxOptions{IsoLevel: isolation}, func(ctx context.Context) error {
+					tx, _ := f.manager.Tx(ctx)
+					var before, after string
+					if err := tx.QueryRow(ctx, "SHOW transaction_isolation").Scan(&before); err != nil {
+						return err
+					}
+					err := (managerWithin{f.manager}).Within(ctx, func(nested context.Context) error {
+						nestedCalled = true
+						if operation == "Purge" {
+							return f.store.Purge(nested, managerUser, func(ctx context.Context, id string) error {
+								effectCalled = true
+								return f.remove(ctx, id)
+							})
+						}
+						alive, err := f.store.Guard(nested, managerUser)
+						if err != nil {
+							return err
+						}
+						if alive {
+							effectCalled = true
+							return f.remove(nested, managerUser)
+						}
+						return nil
+					})
+					if scanErr := tx.QueryRow(ctx, "SHOW transaction_isolation").Scan(&after); scanErr != nil {
+						return scanErr
+					}
+					if before != string(isolation) || after != before {
+						return fmt.Errorf("outer isolation changed: before=%q, after=%q, want=%q", before, after, isolation)
+					}
+					return err
+				})
+				if !errors.Is(err, tombstone.ErrIsolation) || !nestedCalled || effectCalled {
+					t.Fatalf("nested %s = %v, nested callback = %v, business effect = %v", operation, err, nestedCalled, effectCalled)
+				}
+				f.assertState(t, 1, 0, 0)
+			})
+		}
 	}
 }
 

@@ -5,10 +5,18 @@ import (
 	"time"
 
 	postgres "github.com/fin-assist/go-postgres"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/fin-assist/go-tombstone"
 )
+
+// managerWithin only adapts names. Run owns the transaction, including COMMIT.
+type managerWithin struct{ *postgres.Manager }
+
+func (m managerWithin) Within(ctx context.Context, fn func(context.Context) error) error {
+	return m.RunWith(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
+}
 
 func ExampleNew_goPostgres() {
 	// The service applies tombstone.Migrations and its own migrations before wiring.
