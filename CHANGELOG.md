@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+
+## [v0.1.1] — 2026-10-26
+
 ### Изменено
 
 - FIN-341: правила lint о процессном состоянии приведены к ядру go-library-template (FIN-322): секции `forbidigo` и `depguard` в `.golangci.yml` и `scripts/test_lint_policy.py` совпадают с шаблоном. Добавлены запреты `slog.With` и `os.Exit`; сняты правила вне ядра: `grpclog` и `grpclog/glogger`, `prometheus.Unregister`, `http.DefaultTransport`/`DefaultServeMux`/`PostForm`, `otel.Tracer`/`Meter`/`Handle` и `otel/log/global`, `os.UserHomeDir`/`UserConfigDir`/`UserCacheDir`, `os.TempDir`/`CreateTemp`/`MkdirTemp`, `(*os.File).Chdir`, `runtime.SetDefaultGOMAXPROCS`, `syscall`/`golang.org/x/sys`; принцип в целом проверяется на ревью. Runtime и экспортируемый API не менялись.
@@ -12,6 +15,7 @@
 - FIN-243: независимые unit/integration/API statements gates 80 % production-пакетов (по согласованию исключён только internal/pgtest), защита от пустых suite и содержательные тесты публичного API; прежний coverage-diff удалён. Runtime и экспортируемый API не изменены.
 - FIN-312: записи, вошедшие в уже выпущенный тег v0.1.0, перенесены из «Unreleased» в секцию v0.1.0; в docs/releasing.md записано исключение для GitHub Release v0.1.0. Runtime, API и теги не изменены.
 - FIN-295: README «Внедрение» описывает подключение через go-grpc `server.Tombstones`: адаптер над `Store.Deleted` без кэша, отличие кода сбоя (`UNAVAILABLE`), учёт метрики при `AllowDeleted`. Runtime и экспортируемый API не изменены.
+- Обновления Renovate после v0.1.0: `contracts/gen/go` v0.4.0 → v0.5.0, `go-identity` v0.1.0 → v0.2.0; добавленные тестовые зависимости из FIN-244/FIN-319 обновлены до `go-postgres` v0.3.0 и `go-migrate` v0.2.0. `prometheus/client_golang` v1.23.2 → v1.25.0, транзитивные `prometheus/client_model` v0.6.2 → v0.6.3, `prometheus/common` v0.66.1 → v0.72.0, `prometheus/procfs` v0.16.1 → v0.22.0; неиспользуемый indirect `go.yaml.in/yaml/v2` удалён из go.mod. Минимальные версии в графе модулей повышены; директива Go и мажорные пути зависимостей не менялись.
 
 ### Добавлено
 
@@ -20,7 +24,6 @@
 ### Исправлено
 
 - FIN-264: проверка версии в CI сохраняет сравнение с предыдущим выпуском при публикации тега во время gorelease; чужие и изменившиеся теги отклоняются. Runtime и публичный API не меняются.
-
 
 ## [v0.1.0] — 2026-10-23
 
