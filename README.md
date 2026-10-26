@@ -273,3 +273,7 @@ make release-check VERSION=v0.2.0
 Профили собираются Go из `go.mod`. Только анализатор запускается с `GOTOOLCHAIN=auto`, поскольку требует Go1.27+, даже когда `setup-go` задаёт local; закреплён `go-test-coverage/v2 v2.20.1`; принято его округление **79,95 % → 80,0 %**. `make cover` собирает три профиля и проверяет каждый, `make cover-combined` строит только информационное объединение встроенным comma-profile механизмом инструмента. Низкий уровень нельзя компенсировать combined. Профили `unit.out`, `integration.out`, `api.out`, JSON и штатные отчёты сохраняются как artifacts и в summary. Required check `go` падает при ошибке любого suite/gate; PR-write права и комментарии coverage не нужны.
 
 `make test` сохраняет race-тесты всех уровней, vet, Python-тесты скриптов и CHANGELOG; `make lint`, `make api` и release/migration/Renovate checks сохраняются. Все тестовые запуски ограничиваются временем процесса. БД локально: Docker PostgreSQL18 или `TEST_DATABASE_URL`; пропуск не является успешной проверкой.
+
+Проверка `api` устойчива к публикации тега во время CI: release-коммит сравнивается
+с предыдущим выпуском, удалённый тег проверяется по commit до и после `gorelease`.
+Подробности и границы исключения — [docs/releasing.md](docs/releasing.md#проверка-версии-в-ci-fin-264).
