@@ -2,5 +2,36 @@
   "baseBranchPatterns": [
     "main"
   ],
-  "packageRules": []
+  "packageRules": [
+    {
+      "description": "FIN-211: recovery of an automatically failed dependency family",
+      "matchPackageNames": [
+        "github.com/fin-assist/go-migrate"
+      ],
+      "matchDatasources": [
+        "go"
+      ],
+      "recreateWhen": "always",
+      "matchJsonata": [
+        "newMajor = 0"
+      ]
+    },
+    {
+      "description": "FIN-211: failed twice; retry explicitly in Dependency Dashboard",
+      "matchPackageNames": [
+        "github.com/fin-assist/go-migrate"
+      ],
+      "matchDatasources": [
+        "go"
+      ],
+      "dependencyDashboardApproval": true,
+      "recreateWhen": "never",
+      "groupName": null,
+      "additionalBranchPrefix": "fin211-retry-31-",
+      "matchNewValue": "/^v0\\.2\\.1$/",
+      "matchJsonata": [
+        "$not($exists(newDigest)) or newDigest = null"
+      ]
+    }
+  ]
 }
