@@ -178,18 +178,17 @@ Also:
 
 ## Checks
 
-FIN-264: `scripts/api_check.py` finds the latest upward introduction of a CHANGELOG
-version on first-parent history. Reverting an unpublished release keeps the old
-published version historical; reintroducing the unpublished number checks a new
-candidate. Every still-unpublished version gets -version, including later commits;
-published release commits are rechecked too. Already-published development uses
-the newest tag and may accept a later same-version first-parent release commit.
-Remote tag identity is checked before/after gorelease. Only its full pinned
-already-exists summary can excuse concurrent publication; other invalid verdicts
-remain failures. Candidates and audited legacy pins require verified identity;
-foreign/moved/deleted tags and remote failures fail closed. Pins bind exact
-module/version/SHA only. See `docs/releasing.md` and `scripts/test_api_check.py`;
-preserve read-only credentials and the required api job.
+FIN-264: `scripts/api_check.py` snapshots remote tag identity before selecting the
+release segment. An unpublished version uses its current first-parent same-version
+segment; an already published tag anchors its historical segment. This distinguishes
+retries from restoring a published CHANGELOG section after a revert, including typos.
+Every unpublished version and every checked HEAD tagged with that version gets
+-version against the previous release. Published development keeps the newest base.
+Before/after tag SHA must agree. Publication during a check cannot substitute an
+abandoned attempt or suppress an invalid verdict other than the pinned full
+already-exists summary. Preparation branches, foreign/moved/deleted tags and remote
+failures fail closed. Audited legacy pins bind exact module/version/SHA only.
+See `docs/releasing.md` and `scripts/test_api_check.py`; keep required api and read-only rights.
 
 CI (table in `README.md`): `go mod tidy` clean, `go vet`, `go test -race` with PostgreSQL 18 in Docker and three independent statements coverage gates, script tests and the `CHANGELOG.md` format, golangci-lint, `gorelease` against the latest tag, and
 on PRs the migration checks (existing files unchanged, squawk on new ones). Run `make test` (or `make cover`),
