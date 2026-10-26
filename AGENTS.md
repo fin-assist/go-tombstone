@@ -185,7 +185,8 @@ development stays informational even during publication. Exact remote tag identi
 checked before/after gorelease. Only the pinned tool's exact already-exists summary at
 the expected release commit is accepted. Unknown candidate reports, foreign/moved tags
 and remote failures fail closed. See `docs/releasing.md` and `scripts/test_api_check.py`;
-preserve read-only credentials and the required api job.
+preserve read-only credentials and the required api job. FIN-312 compatibility pins only
+the exact module/version/SHA of three historical v0.1.0 tags; it is not a generic bypass.
 
 CI (table in `README.md`): `go mod tidy` clean, `go vet`, `go test -race` with PostgreSQL 18 in Docker and three independent statements coverage gates, script tests and the `CHANGELOG.md` format, golangci-lint, `gorelease` against the latest tag, and
 on PRs the migration checks (existing files unchanged, squawk on new ones). Run `make test` (or `make cover`),
